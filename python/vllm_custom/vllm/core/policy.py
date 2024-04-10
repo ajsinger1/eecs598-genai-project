@@ -43,12 +43,17 @@ class OUTPUT_LENGTH(Policy):
         seq_group: SequenceGroup,
     ) -> float:
         return seq_group.output_length
+    
+class PREEMPTION(Policy):
+    def get_priority(self, now: float, seq_group: SequenceGroup) -> float:
+        pass
 
 class PolicyFactory:
 
     _POLICY_REGISTRY = {
         'fcfs': FCFS,
         'output-length': OUTPUT_LENGTH, # CUSTOM
+        'preemption': PREEMPTION
     }
 
     @classmethod

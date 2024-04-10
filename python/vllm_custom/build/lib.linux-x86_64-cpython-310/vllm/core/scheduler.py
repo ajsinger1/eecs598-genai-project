@@ -89,7 +89,7 @@ class Scheduler:
                                 self.scheduler_config.max_num_batched_tokens)
 
         # Instantiate the scheduling policy.
-        self.policy = PolicyFactory.get_policy(policy_name="output-length") # CUSTOM: default is "fcfs", we are implementing "output-len"
+        self.policy = PolicyFactory.get_policy(policy_name="preemption") # CUSTOM: default is "fcfs", we are implementing "preemption"
         # Create the block space manager.
         self.block_manager = BlockSpaceManager(
             block_size=self.cache_config.block_size,
@@ -277,7 +277,7 @@ class Scheduler:
         # Reserve new token slots for the running sequence groups.
         running: Deque[SequenceGroup] = deque()
         preempted: List[SequenceGroup] = []
-        while self.running:
+        while self.running: # TODO: may need to switch up how this scheduling is done
             seq_group = self.running.popleft()
             while not self.block_manager.can_append_slot(seq_group):
                 if self.running:

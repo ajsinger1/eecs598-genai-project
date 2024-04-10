@@ -96,7 +96,7 @@ class SequenceData:
         self.cumulative_logprob += logprob
 
     def get_len(self) -> int:
-        return len(self.output_token_ids) + len(self.prompt_token_ids)
+        return len(self.output_token_ids) + len(self.prompt_token_ids) # TODO HERE IS WHERE WE CAN GET 
 
     def get_prompt_len(self) -> int:
         return len(self.prompt_token_ids)
