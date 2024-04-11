@@ -23,11 +23,14 @@ if inference mode is normal:
     (3) if preempted waiting state + swap is >= X or running/waiting are empty:
             set inference mode to preempted
 
+            EDGE CASE - if running is empty and preemted running is also empty (only happens first preemption cycle)
+                then nothing is in scheduler_outputs and it incorrectly returns as finished
+
 if inference mode is preempted: --> 
     (4) for sequence in preempted waiting state:
             if space in preempted running state:
                 move sequence to preempted running state
-     (5) if preempted waiting state + swap is <= Y and waiting is not empty:
+     (5) if preempted waiting state + swap is <= Y and running/waiting is not empty:
             set inference mode to normal
 
 return control LLM engine which then runs inference step
