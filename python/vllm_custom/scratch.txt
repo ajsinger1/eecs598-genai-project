@@ -27,7 +27,7 @@ if inference mode is preempted: -->
     (4) for sequence in preempted waiting state:
             if space in preempted running state:
                 move sequence to preempted running state
-     (5) if preempted waiting state + swap is <= Y or waiting is not empty:
+     (5) if preempted waiting state + swap is <= Y and waiting is not empty:
             set inference mode to normal
 
 return control LLM engine which then runs inference step
