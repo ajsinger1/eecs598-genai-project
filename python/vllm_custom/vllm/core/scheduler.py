@@ -144,7 +144,7 @@ class Scheduler:
         if isinstance(request_id, str):
             request_id = (request_id, )
         request_ids = set(request_id)
-        for state_queue in [self.waiting, self.running, self.swapped]:
+        for state_queue in [self.waiting, self.running, self.swapped, self.preempt_running, self.preempt_waiting, self.preempt_swapped]:
             aborted_groups: List[SequenceGroup] = []
             for seq_group in state_queue:
                 if not request_ids:
@@ -165,10 +165,10 @@ class Scheduler:
                     self.free_seq(seq)
 
     def has_unfinished_seqs(self) -> bool:
-        return self.waiting or self.running or self.swapped
+        return self.waiting or self.running or self.swapped or self.preempt_running or self.preempt_waiting or self.preempt_swapped
 
     def get_num_unfinished_seq_groups(self) -> int:
-        return len(self.waiting) + len(self.running) + len(self.swapped)
+        return len(self.waiting) + len(self.running) + len(self.swapped) + len(self.preempt_waiting) + len(self.preempt_running) + len(self.preempt_swapped)
 
     def _schedule(self) -> SchedulerOutputs:
         global IS_NORMAL_EXECUTION_MODE
@@ -195,24 +195,23 @@ class Scheduler:
                     assert(seq_group.num_seqs() == 1)
                     self._swap_out(seq_group, blocks_to_swap_out)
                 
-                if self.preempt_running:
-                    num_batched_tokens = sum(
-                        seq_group.num_seqs(status=SequenceStatus.RUNNING)
-                        for seq_group in self.preempt_running)
+                num_batched_tokens = sum(
+                    seq_group.num_seqs(status=SequenceStatus.RUNNING)
+                    for seq_group in self.preempt_running)
 
-                    for seq_group in self.preempt_running:
-                        self._swap_in(seq_group, blocks_to_swap_in)
+                for seq_group in self.preempt_running:
+                    self._swap_in(seq_group, blocks_to_swap_in)
 
-                    scheduler_outputs = SchedulerOutputs(
-                        scheduled_seq_groups=self.preempt_running,
-                        prompt_run=False,
-                        num_batched_tokens=num_batched_tokens,
-                        blocks_to_swap_in=blocks_to_swap_in,
-                        blocks_to_swap_out=blocks_to_swap_out,
-                        blocks_to_copy=blocks_to_copy,
-                        ignored_seq_groups=[],
-                    )
-                    return scheduler_outputs
+                scheduler_outputs = SchedulerOutputs(
+                    scheduled_seq_groups=self.preempt_running,
+                    prompt_run=False,
+                    num_batched_tokens=num_batched_tokens,
+                    blocks_to_swap_in=blocks_to_swap_in,
+                    blocks_to_swap_out=blocks_to_swap_out,
+                    blocks_to_copy=blocks_to_copy,
+                    ignored_seq_groups=[],
+                )
+                return scheduler_outputs
                 
             else:      
                 # Join waiting sequences if possible.
@@ -408,7 +407,7 @@ class Scheduler:
                     ignored_seq_groups=[],
                 )
                 return scheduler_outputs
-        if not IS_NORMAL_EXECUTION_MODE: # Not IS_NORMAL_EXECUTION
+        else: # Not IS_NORMAL_EXECUTION
             if len(self.preempt_waiting) + len(self.preempt_swapped) <= PREEMPTION_MODE_LOWER_THRESHOLD and (self.swapped or self.running or self.waiting):
                 IS_NORMAL_EXECUTION_MODE = True
                 for seq_group in self.preempt_running:
@@ -670,6 +669,8 @@ class Scheduler:
     def free_finished_seq_groups(self) -> None:
         self.running = deque(seq_group for seq_group in self.running
                              if not seq_group.is_finished())
+        self.preempt_running = deque(seq_group for seq_group in self.preempt_running
+                             if not seq_group.is_finished())
 
     def _allocate(self, seq_group: SequenceGroup) -> None:
         self.block_manager.allocate(seq_group)
@@ -738,7 +739,10 @@ class Scheduler:
         blocks_to_swap_out: Dict[int, int],
     ) -> None:
         self._swap_out(seq_group, blocks_to_swap_out)
-        self.swapped.append(seq_group)
+        if IS_NORMAL_EXECUTION_MODE:
+            self.swapped.append(seq_group)
+        else:
+            self.preempt_swapped.append(seq_group)
 
     def _swap_in(
         self,
