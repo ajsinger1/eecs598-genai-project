@@ -96,7 +96,7 @@ class Scheduler:
                                 self.scheduler_config.max_num_batched_tokens)
 
         # Instantiate the scheduling policy.
-        self.policy = PolicyFactory.get_policy(policy_name="output-length") # CUSTOM: default is "fcfs", we are implementing "output-len"
+        self.policy = PolicyFactory.get_policy(policy_name="fcfs") # CUSTOM: default is "fcfs", we have also implemented "output-len"
         # Create the block space manager.
         self.block_manager = BlockSpaceManager(
             block_size=self.cache_config.block_size,
@@ -194,24 +194,25 @@ class Scheduler:
                 for seq_group in self.running:
                     assert(seq_group.num_seqs() == 1)
                     self._swap_out(seq_group, blocks_to_swap_out)
-
-                num_batched_tokens = sum(
-                    seq_group.num_seqs(status=SequenceStatus.RUNNING)
-                    for seq_group in self.preempt_running)
                 
-                for seq_group in self.preempt_running:
-                    self._swap_in(seq_group, blocks_to_swap_in)
+                if self.preempt_running:
+                    num_batched_tokens = sum(
+                        seq_group.num_seqs(status=SequenceStatus.RUNNING)
+                        for seq_group in self.preempt_running)
 
-                scheduler_outputs = SchedulerOutputs(
-                    scheduled_seq_groups=self.preempt_running,
-                    prompt_run=False,
-                    num_batched_tokens=num_batched_tokens,
-                    blocks_to_swap_in=blocks_to_swap_in,
-                    blocks_to_swap_out=blocks_to_swap_out,
-                    blocks_to_copy=blocks_to_copy,
-                    ignored_seq_groups=[],
-                )
-                return scheduler_outputs
+                    for seq_group in self.preempt_running:
+                        self._swap_in(seq_group, blocks_to_swap_in)
+
+                    scheduler_outputs = SchedulerOutputs(
+                        scheduled_seq_groups=self.preempt_running,
+                        prompt_run=False,
+                        num_batched_tokens=num_batched_tokens,
+                        blocks_to_swap_in=blocks_to_swap_in,
+                        blocks_to_swap_out=blocks_to_swap_out,
+                        blocks_to_copy=blocks_to_copy,
+                        ignored_seq_groups=[],
+                    )
+                    return scheduler_outputs
                 
             else:      
                 # Join waiting sequences if possible.
@@ -407,7 +408,7 @@ class Scheduler:
                     ignored_seq_groups=[],
                 )
                 return scheduler_outputs
-        else: # Not IS_NORMAL_EXECUTION
+        if not IS_NORMAL_EXECUTION_MODE: # Not IS_NORMAL_EXECUTION
             if len(self.preempt_waiting) + len(self.preempt_swapped) <= PREEMPTION_MODE_LOWER_THRESHOLD and (self.swapped or self.running or self.waiting):
                 IS_NORMAL_EXECUTION_MODE = True
                 for seq_group in self.preempt_running:
