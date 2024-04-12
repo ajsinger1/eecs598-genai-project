@@ -181,13 +181,18 @@ class Scheduler:
         now = time.monotonic()
 
         if IS_NORMAL_EXECUTION_MODE:
-            for seq_group in self.running:
+            new_running: Deque[SequenceGroup] = deque()
+            while self.running:
+                seq_group = self.running.popleft()
                 assert(seq_group.num_seqs() == 1)
                 if seq_group.get_seqs()[0].get_len() >= PREEMPTION_THRESHOLD:
                     # Move sequence group to the preemption waiting queue
                     self.preempt_waiting.append(seq_group)
-                    self.running.remove(seq_group)
                     self._swap_out(seq_group, blocks_to_swap_out)
+                else:
+                    new_running.append(seq_group)
+            self.running = new_running
+
             
             if len(self.preempt_waiting) + len(self.preempt_swapped) >= PREEMPTION_MODE_UPPER_THRESHOLD or not (self.swapped or self.running or self.waiting):
                 IS_NORMAL_EXECUTION_MODE = False
