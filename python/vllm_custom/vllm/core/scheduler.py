@@ -203,6 +203,8 @@ class Scheduler:
                 for seq_group in self.running:
                     self._swap_in(seq_group, blocks_to_swap_in)
 
+                print(f"Swap in: {len(blocks_to_swap_in.keys())}, Swap out: {len(blocks_to_swap_out.keys())}")
+
                 scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups=self.running,
                     prompt_run=False,
