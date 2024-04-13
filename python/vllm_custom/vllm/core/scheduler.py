@@ -225,8 +225,14 @@ class Scheduler:
                 print("Swap out running")
 
                 for seq_group in self.running:
-                    assert(seq_group.num_seqs() == 1)
-                    self._swap_out(seq_group, blocks_to_swap_out)
+                    if seq_group.num_seqs(status=SequenceStatus.RUNNING) == 0:
+                        continue
+                    if self.block_manager.can_swap_out(seq_group):
+                        self._swap_out(seq_group, blocks_to_swap_out)
+                    else:
+                        IS_NORMAL_EXECUTION_MODE = True
+                        TRANSITIONING_MODES = False
+                        break
                 
                 num_batched_tokens = 0
 
@@ -474,8 +480,14 @@ class Scheduler:
                 print("Swap out preempt running")
 
                 for seq_group in self.preempt_running:
-                    assert(seq_group.num_seqs() == 1)
-                    self._swap_out(seq_group, blocks_to_swap_out)
+                    if seq_group.num_seqs(status=SequenceStatus.RUNNING) == 0:
+                        continue
+                    if self.block_manager.can_swap_out(seq_group):
+                        self._swap_out(seq_group, blocks_to_swap_out)
+                    else:
+                        IS_NORMAL_EXECUTION_MODE = False
+                        TRANSITIONING_MODES = False
+                        break
 
                 num_batched_tokens = 0
 
