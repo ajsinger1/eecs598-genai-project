@@ -10,6 +10,8 @@ from vllm.outputs import RequestOutput
 from vllm.sampling_params import SamplingParams
 from vllm.utils import Counter
 
+import sys
+
 
 class LLM:
     """An LLM for generating texts from given prompts and sampling parameters.
@@ -205,7 +207,7 @@ class LLM:
         # Run the engine.
         outputs: List[RequestOutput] = []
         while self.llm_engine.has_unfinished_requests():
-            print("here")
+            print("here", file=sys.stderr)
             step_outputs = self.llm_engine.step()
             for output in step_outputs:
                 if output.finished:
