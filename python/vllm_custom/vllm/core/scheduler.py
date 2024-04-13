@@ -30,6 +30,7 @@ class PreemptionMode(enum.Enum):
 
 # CUSTOM
 IS_NORMAL_EXECUTION_MODE = True
+TRANSITIONING_MODES = False
 PREEMPTION_THRESHOLD = 50 # TODO FIGURE THIS OUT
 PREEMPTION_MODE_UPPER_THRESHOLD = 10 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
 PREEMPTION_MODE_LOWER_THRESHOLD = 5 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
@@ -181,34 +182,51 @@ class Scheduler:
         now = time.monotonic()
 
         if IS_NORMAL_EXECUTION_MODE:
-            new_running: Deque[SequenceGroup] = deque()
-            while self.running:
-                seq_group = self.running.popleft()
-                assert(seq_group.num_seqs() == 1)
-                if seq_group.get_seqs()[0].get_len() >= PREEMPTION_THRESHOLD:
-                    # Move sequence group to the preemption waiting queue
-                    self._swap_out(seq_group, blocks_to_swap_out)
-                    self.preempt_swapped.append(seq_group)
-                else:
-                    new_running.append(seq_group)
-            self.running = new_running
+            # new_running: Deque[SequenceGroup] = deque()
+            # while self.running:
+            #     seq_group = self.running.popleft()
+            #     assert(seq_group.num_seqs() == 1)
+            #     if seq_group.get_seqs()[0].get_len() >= PREEMPTION_THRESHOLD:
+            #         # Move sequence group to the preemption waiting queue
+            #         self._swap_out(seq_group, blocks_to_swap_out)
+            #         self.preempt_swapped.append(seq_group)
+            #     else:
+            #         new_running.append(seq_group)
+            # self.running = new_running
 
-            
-            if len(self.preempt_swapped) >= PREEMPTION_MODE_UPPER_THRESHOLD or not (self.swapped or self.running or self.waiting):
+            if TRANSITIONING_MODES:
+                TRANSITIONING_MODES = False
+                num_batched_tokens = sum(
+                    seq_group.num_seqs(status=SequenceStatus.RUNNING)
+                    for seq_group in self.running)
+                
+                for seq_group in self.running:
+                    self._swap_in(seq_group, blocks_to_swap_in)
+
+                scheduler_outputs = SchedulerOutputs(
+                    scheduled_seq_groups=self.running,
+                    prompt_run=False,
+                    num_batched_tokens=num_batched_tokens,
+                    blocks_to_swap_in=blocks_to_swap_in,
+                    blocks_to_swap_out=blocks_to_swap_out,
+                    blocks_to_copy=blocks_to_copy,
+                    ignored_seq_groups=[],
+                )
+                return scheduler_outputs
+
+            elif len(self.preempt_swapped) >= PREEMPTION_MODE_UPPER_THRESHOLD or not (self.swapped or self.running or self.waiting):
                 IS_NORMAL_EXECUTION_MODE = False
+                TRANSITIONING_MODES = True
                 for seq_group in self.running:
                     assert(seq_group.num_seqs() == 1)
                     self._swap_out(seq_group, blocks_to_swap_out)
                 
-                num_batched_tokens = sum(
-                    seq_group.num_seqs(status=SequenceStatus.RUNNING)
-                    for seq_group in self.preempt_running)
+                num_batched_tokens = 0
 
-                for seq_group in self.preempt_running:
-                    self._swap_in(seq_group, blocks_to_swap_in)
+                empty_scheduled: List[SequenceGroup] = []
 
                 scheduler_outputs = SchedulerOutputs(
-                    scheduled_seq_groups=self.preempt_running,
+                    scheduled_seq_groups= empty_scheduled,
                     prompt_run=False,
                     num_batched_tokens=num_batched_tokens,
                     blocks_to_swap_in=blocks_to_swap_in,
@@ -332,6 +350,13 @@ class Scheduler:
                 preempted: List[SequenceGroup] = []
                 while self.running:
                     seq_group = self.running.popleft()
+
+                    if seq_group.get_seqs()[0].get_len() >= PREEMPTION_THRESHOLD:
+                        # Move sequence group to the preemption waiting queue if it is over the preemption threshold
+                        self._swap_out(seq_group, blocks_to_swap_out)
+                        self.preempt_swapped.append(seq_group)
+                        continue
+
                     while not self.block_manager.can_append_slot(seq_group):
                         if self.running:
                             # Preempt the lowest-priority sequence groups.
@@ -413,21 +438,39 @@ class Scheduler:
                 )
                 return scheduler_outputs
         else: # Not IS_NORMAL_EXECUTION
-            if len(self.preempt_swapped) <= PREEMPTION_MODE_LOWER_THRESHOLD and (self.swapped or self.running or self.waiting):
+            if TRANSITIONING_MODES:
+                TRANSITIONING_MODES = False
+                num_batched_tokens = sum(
+                    seq_group.num_seqs(status=SequenceStatus.RUNNING)
+                    for seq_group in self.preempt_running)
+                
+                for seq_group in self.preempt_running:
+                    self._swap_in(seq_group, blocks_to_swap_in)
+
+                scheduler_outputs = SchedulerOutputs(
+                    scheduled_seq_groups=self.preempt_running,
+                    prompt_run=False,
+                    num_batched_tokens=num_batched_tokens,
+                    blocks_to_swap_in=blocks_to_swap_in,
+                    blocks_to_swap_out=blocks_to_swap_out,
+                    blocks_to_copy=blocks_to_copy,
+                    ignored_seq_groups=[],
+                )
+                return scheduler_outputs
+
+            elif len(self.preempt_swapped) <= PREEMPTION_MODE_LOWER_THRESHOLD and (self.swapped or self.running or self.waiting):
                 IS_NORMAL_EXECUTION_MODE = True
+                TRANSITIONING_MODES = True
                 for seq_group in self.preempt_running:
                     assert(seq_group.num_seqs() == 1)
                     self._swap_out(seq_group, blocks_to_swap_out)
 
-                num_batched_tokens = sum(
-                    seq_group.num_seqs(status=SequenceStatus.RUNNING)
-                    for seq_group in self.running)
+                num_batched_tokens = 0
 
-                for seq_group in self.running:
-                    self._swap_in(seq_group, blocks_to_swap_in)
+                empty_scheduled: List[SequenceGroup] = []
 
                 scheduler_outputs = SchedulerOutputs(
-                    scheduled_seq_groups=self.running,
+                    scheduled_seq_groups= empty_scheduled,
                     prompt_run=False,
                     num_batched_tokens=num_batched_tokens,
                     blocks_to_swap_in=blocks_to_swap_in,
