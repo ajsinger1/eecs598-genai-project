@@ -37,6 +37,8 @@ class CacheEngine:
         self.block_size = cache_config.block_size
         self.num_gpu_blocks = cache_config.num_gpu_blocks
         self.num_cpu_blocks = cache_config.num_cpu_blocks
+        print(f"CPU BLOCKS: {cache_config.num_cpu_blocks}")
+        print(f"GPU BLOCKS: {cache_config.num_gpu_blocks}")
 
         # Skip initializing CUDA stream and buffer for Neuron backend.
         if is_neuron():
