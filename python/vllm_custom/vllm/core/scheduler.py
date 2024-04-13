@@ -144,7 +144,7 @@ class Scheduler:
         if isinstance(request_id, str):
             request_id = (request_id, )
         request_ids = set(request_id)
-        for state_queue in [self.waiting, self.running, self.swapped, self.preempt_running, self.preempt_waiting, self.preempt_swapped]:
+        for state_queue in [self.waiting, self.running, self.swapped, self.preempt_running, self.preempt_swapped]:
             aborted_groups: List[SequenceGroup] = []
             for seq_group in state_queue:
                 if not request_ids:
@@ -165,10 +165,10 @@ class Scheduler:
                     self.free_seq(seq)
 
     def has_unfinished_seqs(self) -> bool:
-        return self.waiting or self.running or self.swapped or self.preempt_running or self.preempt_waiting or self.preempt_swapped
+        return self.waiting or self.running or self.swapped or self.preempt_running or self.preempt_swapped
 
     def get_num_unfinished_seq_groups(self) -> int:
-        return len(self.waiting) + len(self.running) + len(self.swapped) + len(self.preempt_waiting) + len(self.preempt_running) + len(self.preempt_swapped)
+        return len(self.waiting) + len(self.running) + len(self.swapped) + len(self.preempt_running) + len(self.preempt_swapped)
 
     def _schedule(self) -> SchedulerOutputs:
         global IS_NORMAL_EXECUTION_MODE
