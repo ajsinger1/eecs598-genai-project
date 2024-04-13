@@ -456,7 +456,7 @@ class Scheduler:
                     leftover_waiting_sequences = deque()
                     print(self.preempt_waiting)
                     while self.preempt_waiting:
-                        print(self.preempt_waiting)
+                        assert(self.preempt_waiting)
                         seq_group = self.preempt_waiting[0]
                         waiting_seqs = seq_group.get_seqs(
                             status=SequenceStatus.WAITING)
