@@ -446,24 +446,24 @@ class Scheduler:
                 # Reserve new token slots for the running sequence groups.
                 running: Deque[SequenceGroup] = deque()
                 preempted: List[SequenceGroup] = []
-                # while self.preempt_running:
-                #     seq_group = self.preempt_running.popleft()
-                #     while not self.block_manager.can_append_slot(seq_group):
-                #         if self.preempt_running:
-                #             # Preempt the lowest-priority sequence groups.
-                #             victim_seq_group = self.preempt_running.pop()
-                #             self._preempt(victim_seq_group, blocks_to_swap_out)
-                #             preempted.append(victim_seq_group)
-                #         else:
-                #             # No other sequence groups can be preempted.
-                #             # Preempt the current sequence group.
-                #             self._preempt(seq_group, blocks_to_swap_out)
-                #             preempted.append(seq_group)
-                #             break
-                #     else:
-                #         # Append new slots to the sequence group.
-                #         self._append_slot(seq_group, blocks_to_copy)
-                #         running.append(seq_group)
+                while self.preempt_running:
+                    seq_group = self.preempt_running.popleft()
+                    while not self.block_manager.can_append_slot(seq_group):
+                        if self.preempt_running:
+                            # Preempt the lowest-priority sequence groups.
+                            victim_seq_group = self.preempt_running.pop()
+                            self._preempt(victim_seq_group, blocks_to_swap_out)
+                            preempted.append(victim_seq_group)
+                        else:
+                            # No other sequence groups can be preempted.
+                            # Preempt the current sequence group.
+                            self._preempt(seq_group, blocks_to_swap_out)
+                            preempted.append(seq_group)
+                            break
+                    else:
+                        # Append new slots to the sequence group.
+                        self._append_slot(seq_group, blocks_to_copy)
+                        running.append(seq_group)
                 self.preempt_running = running
 
                 # Swap in the sequence groups in the SWAPPED state if possible.
