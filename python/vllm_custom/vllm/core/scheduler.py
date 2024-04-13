@@ -172,7 +172,7 @@ class Scheduler:
         return len(self.waiting) + len(self.running) + len(self.swapped) + len(self.preempt_running) + len(self.preempt_swapped)
 
     def _schedule(self) -> SchedulerOutputs:
-        global IS_NORMAL_EXECUTION_MODE
+        global IS_NORMAL_EXECUTION_MODE, TRANSITIONING_MODES
         # Blocks that need to be swapped or copied before model execution.
         blocks_to_swap_in: Dict[int, int] = {}
         blocks_to_swap_out: Dict[int, int] = {}
