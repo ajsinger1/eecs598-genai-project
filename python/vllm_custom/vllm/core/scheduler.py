@@ -199,6 +199,8 @@ class Scheduler:
                 num_batched_tokens = sum(
                     seq_group.num_seqs(status=SequenceStatus.RUNNING)
                     for seq_group in self.running)
+
+                print("Swap in running")
                 
                 for seq_group in self.running:
                     self._swap_in(seq_group, blocks_to_swap_in)
@@ -219,6 +221,9 @@ class Scheduler:
             elif len(self.preempt_swapped) >= PREEMPTION_MODE_UPPER_THRESHOLD or not (self.swapped or self.running or self.waiting):
                 IS_NORMAL_EXECUTION_MODE = False
                 TRANSITIONING_MODES = True
+                
+                print("Swap out running")
+
                 for seq_group in self.running:
                     assert(seq_group.num_seqs() == 1)
                     self._swap_out(seq_group, blocks_to_swap_out)
@@ -446,6 +451,8 @@ class Scheduler:
                     seq_group.num_seqs(status=SequenceStatus.RUNNING)
                     for seq_group in self.preempt_running)
                 
+                print("Swap in preempt running")
+                
                 for seq_group in self.preempt_running:
                     self._swap_in(seq_group, blocks_to_swap_in)
 
@@ -463,6 +470,9 @@ class Scheduler:
             elif len(self.preempt_swapped) <= PREEMPTION_MODE_LOWER_THRESHOLD and (self.swapped or self.running or self.waiting):
                 IS_NORMAL_EXECUTION_MODE = True
                 TRANSITIONING_MODES = True
+
+                print("Swap out preempt running")
+
                 for seq_group in self.preempt_running:
                     assert(seq_group.num_seqs() == 1)
                     self._swap_out(seq_group, blocks_to_swap_out)
