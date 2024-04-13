@@ -207,7 +207,6 @@ class LLM:
         # Run the engine.
         outputs: List[RequestOutput] = []
         while self.llm_engine.has_unfinished_requests():
-            print("here", file=sys.stderr)
             step_outputs = self.llm_engine.step()
             for output in step_outputs:
                 if output.finished:
