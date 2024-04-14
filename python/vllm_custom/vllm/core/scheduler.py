@@ -32,7 +32,7 @@ class PreemptionMode(enum.Enum):
 IS_NORMAL_EXECUTION_MODE = True
 TRANSITIONING_MODES = False
 PREEMPTION_THRESHOLD = 600 # TODO FIGURE THIS OUT
-PREEMPTION_MODE_UPPER_THRESHOLD = 4000 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
+PREEMPTION_MODE_UPPER_THRESHOLD = 300 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
 PREEMPTION_MODE_LOWER_THRESHOLD = 5 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
 
 
@@ -222,11 +222,13 @@ class Scheduler:
                 #IS_NORMAL_EXECUTION_MODE = False
                 # TRANSITIONING_MODES = True
                 
-                print("Swap out running")
+                print(f"Swap out running: {len(self.running)}")
 
                 for seq_group in self.running:
                     #self._swap_out(seq_group, blocks_to_swap_out)
                     self._preempt_by_recompute(seq_group)
+
+                self.running = []
 
                 IS_NORMAL_EXECUTION_MODE = False
                 
@@ -476,11 +478,13 @@ class Scheduler:
                 # IS_NORMAL_EXECUTION_MODE = True
                 # TRANSITIONING_MODES = True
 
-                print("Swap out preempt running")
+                print(f"Swap out preempt running: {len(self.preempt_running)}")
 
                 for seq_group in self.preempt_running:
                     # self._swap_out(seq_group, blocks_to_swap_out)
                     self._preempt_by_recompute(seq_group)
+
+                self.preempt_running = []
 
                 IS_NORMAL_EXECUTION_MODE = True
 
