@@ -32,8 +32,8 @@ class PreemptionMode(enum.Enum):
 IS_NORMAL_EXECUTION_MODE = True
 TRANSITIONING_MODES = False
 PREEMPTION_THRESHOLD = 500 # TODO FIGURE THIS OUT
-PREEMPTION_MODE_UPPER_THRESHOLD = 20 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
-PREEMPTION_MODE_LOWER_THRESHOLD = 10 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
+PREEMPTION_MODE_UPPER_THRESHOLD = 200 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
+PREEMPTION_MODE_LOWER_THRESHOLD = 5 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
 
 
 class SchedulerOutputs:
@@ -115,7 +115,7 @@ class Scheduler:
         # Sequence groups in the SWAPPED state.
         self.swapped: Deque[SequenceGroup] = deque()
         # Sequence groups in the WAITING state.
-        #self.preempt_waiting: Deque[SequenceGroup] = deque()
+        self.preempt_waiting: Deque[SequenceGroup] = deque()
         # Sequence groups in the SWAPPED state.
         self.preempt_swapped: Deque[SequenceGroup] = deque()
         # Sequence groups in the RUNNING state.
@@ -195,7 +195,7 @@ class Scheduler:
             # self.running = new_running
 
             if TRANSITIONING_MODES:
-                TRANSITIONING_MODES = False
+                # TRANSITIONING_MODES = False
                 num_batched_tokens = sum(
                     seq_group.num_seqs(status=SequenceStatus.RUNNING)
                     for seq_group in self.running)
@@ -219,17 +219,22 @@ class Scheduler:
                 return scheduler_outputs
 
             elif len(self.preempt_swapped) >= PREEMPTION_MODE_UPPER_THRESHOLD or not (self.swapped or self.running or self.waiting):
-                IS_NORMAL_EXECUTION_MODE = False
-                TRANSITIONING_MODES = True
+                #IS_NORMAL_EXECUTION_MODE = False
+                # TRANSITIONING_MODES = True
                 
                 print("Swap out running")
 
                 for seq_group in self.running:
-                    self._swap_out(seq_group, blocks_to_swap_out)
+                    #self._swap_out(seq_group, blocks_to_swap_out)
+                    self._preempt_by_recompute(seq_group)
+
+                IS_NORMAL_EXECUTION_MODE = False
                 
                 num_batched_tokens = 0
 
                 empty_scheduled: List[SequenceGroup] = []
+
+                print(f"Swap in: {len(blocks_to_swap_in.keys())}, Swap out: {len(blocks_to_swap_out.keys())}")
 
                 scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups= empty_scheduled,
@@ -359,8 +364,7 @@ class Scheduler:
 
                     if seq_group.get_seqs()[0].get_len() >= PREEMPTION_THRESHOLD:
                         # Move sequence group to the preemption waiting queue if it is over the preemption threshold
-                        self._swap_out(seq_group, blocks_to_swap_out)
-                        self.preempt_swapped.append(seq_group)
+                        self._preempt_by_threshold(seq_group)
                         continue
 
                     while not self.block_manager.can_append_slot(seq_group):
@@ -445,7 +449,7 @@ class Scheduler:
                 return scheduler_outputs
         else: # Not IS_NORMAL_EXECUTION
             if TRANSITIONING_MODES:
-                TRANSITIONING_MODES = False
+                # TRANSITIONING_MODES = False
                 num_batched_tokens = sum(
                     seq_group.num_seqs(status=SequenceStatus.RUNNING)
                     for seq_group in self.preempt_running)
@@ -454,6 +458,8 @@ class Scheduler:
                 
                 for seq_group in self.preempt_running:
                     self._swap_in(seq_group, blocks_to_swap_in)
+
+                print(f"Swap in: {len(blocks_to_swap_in.keys())}, Swap out: {len(blocks_to_swap_out.keys())}")
 
                 scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups=self.preempt_running,
@@ -467,17 +473,22 @@ class Scheduler:
                 return scheduler_outputs
 
             elif len(self.preempt_swapped) <= PREEMPTION_MODE_LOWER_THRESHOLD and (self.swapped or self.running or self.waiting):
-                IS_NORMAL_EXECUTION_MODE = True
-                TRANSITIONING_MODES = True
+                # IS_NORMAL_EXECUTION_MODE = True
+                # TRANSITIONING_MODES = True
 
                 print("Swap out preempt running")
 
                 for seq_group in self.preempt_running:
-                    self._swap_out(seq_group, blocks_to_swap_out)
+                    # self._swap_out(seq_group, blocks_to_swap_out)
+                    self._preempt_by_recompute(seq_group)
+
+                IS_NORMAL_EXECUTION_MODE = True
 
                 num_batched_tokens = 0
 
                 empty_scheduled: List[SequenceGroup] = []
+
+                print(f"Swap in: {len(blocks_to_swap_in.keys())}, Swap out: {len(blocks_to_swap_out.keys())}")
 
                 scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups= empty_scheduled,
@@ -490,6 +501,109 @@ class Scheduler:
                 )
                 return scheduler_outputs
             else:
+                
+                # Join waiting sequences if possible.
+                if not self.preempt_swapped:
+                    ignored_seq_groups: List[SequenceGroup] = []
+                    scheduled: List[SequenceGroup] = []
+                    # The total number of sequences on the fly, including the
+                    # requests in the generation phase.
+                    num_curr_seqs = sum(seq_group.get_max_num_running_seqs()
+                                        for seq_group in self.preempt_running)
+                    curr_loras = set(
+                        seq_group.lora_int_id
+                        for seq_group in self.preempt_running) if self.lora_enabled else None
+                    seq_lens: List[int] = []
+
+                    # Optimization: We do not sort the waiting queue since the preempted
+                    # sequence groups are added to the front and the new sequence groups
+                    # are added to the back.
+                    leftover_waiting_sequences = deque()
+                    while self.preempt_waiting:
+                        seq_group = self.preempt_waiting[0]
+                        waiting_seqs = seq_group.get_seqs(
+                            status=SequenceStatus.WAITING)
+                        assert len(waiting_seqs) == 1, (
+                            "Waiting sequence group should have only one prompt "
+                            "sequence.")
+                        num_prompt_tokens = waiting_seqs[0].get_len()
+                        if num_prompt_tokens > self.prompt_limit:
+                            logger.warning(
+                                f"Input prompt ({num_prompt_tokens} tokens) is too long"
+                                f" and exceeds limit of {self.prompt_limit}")
+                            for seq in waiting_seqs:
+                                seq.status = SequenceStatus.FINISHED_IGNORED
+                            ignored_seq_groups.append(seq_group)
+                            self.preempt_waiting.popleft()
+                            continue
+
+                        # If the sequence group cannot be allocated, stop.
+                        can_allocate = self.block_manager.can_allocate(seq_group)
+                        if can_allocate == AllocStatus.LATER:
+                            break
+                        elif can_allocate == AllocStatus.NEVER:
+                            logger.warning(
+                                f"Input prompt ({num_prompt_tokens} tokens) is too long"
+                                f" and exceeds the capacity of block_manager")
+                            for seq in waiting_seqs:
+                                seq.status = SequenceStatus.FINISHED_IGNORED
+                            ignored_seq_groups.append(seq_group)
+                            self.preempt_waiting.popleft()
+                            continue
+
+                        lora_int_id = 0
+                        if self.lora_enabled:
+                            lora_int_id = seq_group.lora_int_id
+                            if lora_int_id > 0 and lora_int_id not in curr_loras and len(
+                                    curr_loras) >= self.lora_config.max_loras:
+                                # We don't have a space for another LoRA, so
+                                # we ignore this request for now.
+                                leftover_waiting_sequences.appendleft(seq_group)
+                                self.preempt_waiting.popleft()
+                                continue
+
+                        # If the number of batched tokens exceeds the limit, stop.
+                        new_seq_lens = seq_lens + [num_prompt_tokens]
+                        num_batched_tokens = len(new_seq_lens) * max(new_seq_lens)
+                        if (num_batched_tokens >
+                                self.scheduler_config.max_num_batched_tokens):
+                            break
+
+                        # The total number of sequences in the RUNNING state should not
+                        # exceed the maximum number of sequences.
+                        num_new_seqs = seq_group.get_max_num_running_seqs()
+                        if (num_curr_seqs + num_new_seqs >
+                                self.scheduler_config.max_num_seqs):
+                            break
+
+                        num_paddings = num_batched_tokens - sum(new_seq_lens)
+                        if num_paddings > self.scheduler_config.max_paddings:
+                            break
+                        seq_lens = new_seq_lens
+
+                        if lora_int_id > 0:
+                            curr_loras.add(lora_int_id)
+                        self.preempt_waiting.popleft()
+                        self._allocate(seq_group)
+                        self.preempt_running.append(seq_group)
+                        num_curr_seqs += num_new_seqs
+                        scheduled.append(seq_group)
+
+                    self.preempt_waiting.extendleft(leftover_waiting_sequences)
+
+                    if scheduled or ignored_seq_groups:
+                        scheduler_outputs = SchedulerOutputs(
+                            scheduled_seq_groups=scheduled,
+                            prompt_run=True,
+                            num_batched_tokens=len(seq_lens) *
+                            max(seq_lens) if seq_lens else 0,
+                            blocks_to_swap_in=blocks_to_swap_in,
+                            blocks_to_swap_out=blocks_to_swap_out,
+                            blocks_to_copy=blocks_to_copy,
+                            ignored_seq_groups=ignored_seq_groups,
+                        )
+                        return scheduler_outputs
+                    
                 # NOTE(woosuk): Preemption happens only when there is no available slot
                 # to keep all the sequence groups in the RUNNING state.
                 # In this case, the policy is responsible for deciding which sequence
@@ -687,7 +801,23 @@ class Scheduler:
             self.block_manager.free(seq)
         # NOTE: For FCFS, we insert the preempted sequence group to the front
         # of the waiting queue.
-        self.waiting.appendleft(seq_group)
+        if IS_NORMAL_EXECUTION_MODE:
+            self.waiting.appendleft(seq_group)
+        else:
+            self.preempt_waiting.appendleft(seq_group)
+
+    def _preempt_by_threshold(
+        self,
+        seq_group: SequenceGroup,
+    ) -> None:
+        seqs = seq_group.get_seqs(status=SequenceStatus.RUNNING)
+        assert len(seqs) == 1
+        for seq in seqs:
+            seq.status = SequenceStatus.WAITING
+            self.block_manager.free(seq)
+        # NOTE: For FCFS, we insert the preempted sequence group to the front
+        # of the waiting queue.
+        self.preempt_waiting.append(seq_group)
 
     def _preempt_by_swap(
         self,
