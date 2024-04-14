@@ -32,7 +32,7 @@ class PreemptionMode(enum.Enum):
 IS_NORMAL_EXECUTION_MODE = True
 TRANSITIONING_MODES = False
 PREEMPTION_THRESHOLD = 600 # TODO FIGURE THIS OUT
-PREEMPTION_MODE_UPPER_THRESHOLD = 200 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
+PREEMPTION_MODE_UPPER_THRESHOLD = 4000 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
 PREEMPTION_MODE_LOWER_THRESHOLD = 5 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
 
 
