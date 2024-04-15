@@ -35,7 +35,7 @@ TRANSITIONING_MODES = False
 
 PREEMPTION_THRESHOLD = 600 # TODO FIGURE THIS OUT
 PREEMPTION_MODE_UPPER_THRESHOLD = 30000 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
-PREEMPTION_MODE_LOWER_THRESHOLD = 0 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
+PREEMPTION_MODE_LOWER_THRESHOLD = 5 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
 
 
 class SchedulerOutputs:
@@ -223,7 +223,7 @@ class Scheduler:
                 #IS_NORMAL_EXECUTION_MODE = False
                 # TRANSITIONING_MODES = True
 
-                print("Swap to preempt")
+                print(f"Swap out running: {len(self.running)}")
 
                 for seq_group in self.running:
                     #self._swap_out(seq_group, blocks_to_swap_out)
@@ -469,11 +469,11 @@ class Scheduler:
                 )
                 return scheduler_outputs
 
-            elif len(self.preempt_waiting) and (self.swapped or self.running or self.waiting):
+            elif len(self.preempt_waiting) <= PREEMPTION_MODE_LOWER_THRESHOLD and (self.swapped or self.running or self.waiting):
                 # IS_NORMAL_EXECUTION_MODE = True
                 # TRANSITIONING_MODES = True
 
-                print("Swap to regular")
+                print(f"Swap out preempt running: {len(self.preempt_running)}")
 
                 for seq_group in self.preempt_running:
                     # self._swap_out(seq_group, blocks_to_swap_out)
