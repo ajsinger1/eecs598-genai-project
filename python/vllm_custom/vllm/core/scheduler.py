@@ -223,6 +223,8 @@ class Scheduler:
                 #IS_NORMAL_EXECUTION_MODE = False
                 # TRANSITIONING_MODES = True
 
+                print("Swap to preempt")
+
                 for seq_group in self.running:
                     #self._swap_out(seq_group, blocks_to_swap_out)
                     self._preempt_by_recompute(seq_group)
@@ -470,6 +472,8 @@ class Scheduler:
             elif len(self.preempt_waiting) and (self.swapped or self.running or self.waiting):
                 # IS_NORMAL_EXECUTION_MODE = True
                 # TRANSITIONING_MODES = True
+
+                print("Swap to regular")
 
                 for seq_group in self.preempt_running:
                     # self._swap_out(seq_group, blocks_to_swap_out)
