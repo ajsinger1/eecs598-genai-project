@@ -234,21 +234,21 @@ class LLM:
         # Run the engine.
         outputs: List[RequestOutput] = []
         #times = []
-        while self.llm_engine.has_unfinished_requests():
-            start = time.perf_counter()
-            step_outputs = self.llm_engine.step()
-            end = time.perf_counter()
-            #times.append(end-start)
-            time = end-start
-            with open(filedir / filename, 'w') as file:
-                file.write(str(time) + '\n')
-            # time.now
+        with open(filedir / filename, 'w') as file:
+            while self.llm_engine.has_unfinished_requests():
+                start = time.perf_counter()
+                step_outputs = self.llm_engine.step()
+                end = time.perf_counter()
+                #times.append(end-start)
+                t = end-start
+                file.write(str(t) + '\n')
+                # time.now
 
-            for output in step_outputs:
-                if output.finished:
-                    outputs.append(output)
-                    if use_tqdm:
-                        pbar.update(1)
+                for output in step_outputs:
+                    if output.finished:
+                        outputs.append(output)
+                        if use_tqdm:
+                            pbar.update(1)
         if use_tqdm:
             pbar.close()
         # Sort the outputs by request ID.
