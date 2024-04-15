@@ -455,6 +455,8 @@ class SchedulerConfig:
         max_num_seqs: int,
         max_model_len: int,
         max_paddings: int,
+        preemption_threshold: int = 600,
+        preemption_mode_upper_threshold: int = 30000
     ) -> None:
         if max_num_batched_tokens is not None:
             self.max_num_batched_tokens = max_num_batched_tokens
@@ -465,6 +467,8 @@ class SchedulerConfig:
         self.max_num_seqs = max_num_seqs
         self.max_model_len = max_model_len
         self.max_paddings = max_paddings
+        self.preemption_threshold = preemption_threshold
+        self.preemption_mode_upper_threshold = preemption_mode_upper_threshold
         self._verify_args()
 
     def _verify_args(self) -> None:

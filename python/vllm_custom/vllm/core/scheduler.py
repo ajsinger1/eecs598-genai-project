@@ -31,9 +31,11 @@ class PreemptionMode(enum.Enum):
 # CUSTOM
 IS_NORMAL_EXECUTION_MODE = True
 TRANSITIONING_MODES = False
+
+
 PREEMPTION_THRESHOLD = 600 # TODO FIGURE THIS OUT
-PREEMPTION_MODE_UPPER_THRESHOLD = 300 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
-PREEMPTION_MODE_LOWER_THRESHOLD = 5 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
+PREEMPTION_MODE_UPPER_THRESHOLD = 30000 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
+PREEMPTION_MODE_LOWER_THRESHOLD = 0 # TODO FIGURE THIS OUT, may want to do this by token level instead of seq group level
 
 
 class SchedulerOutputs:
@@ -86,6 +88,9 @@ class Scheduler:
         cache_config: CacheConfig,
         lora_config: Optional[LoRAConfig],
     ) -> None:
+        global PREEMPTION_THRESHOLD, PREEMPTION_MODE_UPPER_THRESHOLD
+        PREEMPTION_THRESHOLD = scheduler_config.preemption_threshold
+        PREEMPTION_MODE_UPPER_THRESHOLD = scheduler_config.preemption_mode_upper_threshold
         self.scheduler_config = scheduler_config
         self.cache_config = cache_config
         # Note for LoRA scheduling: the current policy is extremely
@@ -199,13 +204,9 @@ class Scheduler:
                 num_batched_tokens = sum(
                     seq_group.num_seqs(status=SequenceStatus.RUNNING)
                     for seq_group in self.running)
-
-                print("Swap in running")
                 
                 for seq_group in self.running:
                     self._swap_in(seq_group, blocks_to_swap_in)
-
-                print(f"Swap in: {len(blocks_to_swap_in.keys())}, Swap out: {len(blocks_to_swap_out.keys())}")
 
                 scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups=self.running,
@@ -221,8 +222,6 @@ class Scheduler:
             elif len(self.preempt_waiting) >= PREEMPTION_MODE_UPPER_THRESHOLD or not (self.swapped or self.running or self.waiting):
                 #IS_NORMAL_EXECUTION_MODE = False
                 # TRANSITIONING_MODES = True
-                
-                print(f"Swap out running: {len(self.running)}")
 
                 for seq_group in self.running:
                     #self._swap_out(seq_group, blocks_to_swap_out)
@@ -235,8 +234,6 @@ class Scheduler:
                 num_batched_tokens = 0
 
                 empty_scheduled: List[SequenceGroup] = []
-
-                print(f"Swap in: {len(blocks_to_swap_in.keys())}, Swap out: {len(blocks_to_swap_out.keys())}")
 
                 scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups= empty_scheduled,
@@ -456,12 +453,8 @@ class Scheduler:
                     seq_group.num_seqs(status=SequenceStatus.RUNNING)
                     for seq_group in self.preempt_running)
                 
-                print("Swap in preempt running")
-                
                 for seq_group in self.preempt_running:
                     self._swap_in(seq_group, blocks_to_swap_in)
-
-                print(f"Swap in: {len(blocks_to_swap_in.keys())}, Swap out: {len(blocks_to_swap_out.keys())}")
 
                 scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups=self.preempt_running,
@@ -474,11 +467,9 @@ class Scheduler:
                 )
                 return scheduler_outputs
 
-            elif len(self.preempt_waiting) <= PREEMPTION_MODE_LOWER_THRESHOLD and (self.swapped or self.running or self.waiting):
+            elif len(self.preempt_waiting) and (self.swapped or self.running or self.waiting):
                 # IS_NORMAL_EXECUTION_MODE = True
                 # TRANSITIONING_MODES = True
-
-                print(f"Swap out preempt running: {len(self.preempt_running)}")
 
                 for seq_group in self.preempt_running:
                     # self._swap_out(seq_group, blocks_to_swap_out)
@@ -491,8 +482,6 @@ class Scheduler:
                 num_batched_tokens = 0
 
                 empty_scheduled: List[SequenceGroup] = []
-
-                print(f"Swap in: {len(blocks_to_swap_in.keys())}, Swap out: {len(blocks_to_swap_out.keys())}")
 
                 scheduler_outputs = SchedulerOutputs(
                     scheduled_seq_groups= empty_scheduled,

@@ -45,6 +45,8 @@ class EngineArgs:
     lora_dtype = 'auto'
     max_cpu_loras: Optional[int] = None
     device: str = 'auto'
+    preemption_threshold: int = 600,
+    preemption_mode_upper_threshold: int = 30000
 
     def __post_init__(self):
         if self.tokenizer is None:
@@ -302,7 +304,9 @@ class EngineArgs:
         scheduler_config = SchedulerConfig(self.max_num_batched_tokens,
                                            self.max_num_seqs,
                                            model_config.max_model_len,
-                                           self.max_paddings)
+                                           self.max_paddings,
+                                           self.preemption_threshold,
+                                           self.preemption_mode_upper_threshold)
         lora_config = LoRAConfig(
             max_lora_rank=self.max_lora_rank,
             max_loras=self.max_loras,

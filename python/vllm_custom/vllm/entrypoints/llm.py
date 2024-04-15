@@ -9,8 +9,11 @@ from vllm.engine.llm_engine import LLMEngine
 from vllm.outputs import RequestOutput
 from vllm.sampling_params import SamplingParams
 from vllm.utils import Counter
+import time
+import pathlib
 
 import sys
+import os
 
 
 class LLM:
@@ -86,6 +89,8 @@ class LLM:
         enforce_eager: bool = False,
         max_context_len_to_capture: int = 8192,
         disable_custom_all_reduce: bool = False,
+        preemption_threshold: int = 600,
+        preemption_mode_upper_threshold: int = 30000
         **kwargs,
     ) -> None:
         if "disable_log_stats" not in kwargs:
@@ -106,10 +111,14 @@ class LLM:
             enforce_eager=enforce_eager,
             max_context_len_to_capture=max_context_len_to_capture,
             disable_custom_all_reduce=disable_custom_all_reduce,
+            preemption_threshold=preemption_threshold,
+            preemption_mode_upper_threshold=preemption_mode_upper_threshold,
             **kwargs,
         )
         self.llm_engine = LLMEngine.from_engine_args(engine_args)
         self.request_counter = Counter()
+        self.preemption_threshold = preemption_threshold
+        self.preemption_mode_upper_threshold = preemption_mode_upper_threshold
 
     def get_tokenizer(
             self) -> Union[PreTrainedTokenizer, PreTrainedTokenizerFast]:
@@ -129,6 +138,8 @@ class LLM:
         prefix_pos: Optional[Union[int, List[int]]] = None,
         use_tqdm: bool = True,
         lora_request: Optional[LoRARequest] = None,
+        filename: str = None,
+        filedir: str = None
     ) -> List[RequestOutput]:
         """Generates the completions for the input prompts.
 
@@ -181,7 +192,7 @@ class LLM:
                               token_ids,
                               lora_request=lora_request,
                               prefix_pos=prefix_pos_i)
-        return self._run_engine(use_tqdm)
+        return self._run_engine(filedir, filename, use_tqdm)
 
     def _add_request(
         self,
@@ -199,15 +210,37 @@ class LLM:
                                     lora_request=lora_request,
                                     prefix_pos=prefix_pos)
 
-    def _run_engine(self, use_tqdm: bool) -> List[RequestOutput]:
+    def _run_engine(self, filedir:str, filename:str, use_tqdm: bool) -> List[RequestOutput]:
+        if filedir is None:
+            filedir = "./"
+
+        filedir = pathlib.Path(filedir)
+        if not filedir.exists():
+            print(f"{filedir} does not exist, will create")
+            filedir.mkdir(parents=True, exist_ok=False)
+
+        if filedir.exists() and not filedir.is_dir():
+            print(f"{filedir} is not a directory.")
+            sys.exit(1)
+
+    
+        if filename is None:
+            filename = f"preemption-threshold{self.preemption_threshold}_preemption-mode-upper-threshold{self.preemption_mode_upper_threshold}.out"
+        
         # Initialize tqdm.
         if use_tqdm:
             num_requests = self.llm_engine.get_num_unfinished_requests()
             pbar = tqdm(total=num_requests, desc="Processed prompts")
         # Run the engine.
         outputs: List[RequestOutput] = []
+        times = []
         while self.llm_engine.has_unfinished_requests():
+            start = time.perf_counter()
             step_outputs = self.llm_engine.step()
+            end = time.perf_counter()
+            times.append(end-start)
+            # time.now
+
             for output in step_outputs:
                 if output.finished:
                     outputs.append(output)
@@ -219,4 +252,7 @@ class LLM:
         # This is necessary because some requests may be finished earlier than
         # its previous requests.
         outputs = sorted(outputs, key=lambda x: int(x.request_id))
+        with open(filedir / filename, 'w') as file:
+            for t in times:
+                file.write(t)
         return outputs
