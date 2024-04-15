@@ -225,7 +225,7 @@ class LLM:
 
     
         if filename is None:
-            filename = f"preemption-threshold{self.preemption_threshold}_preemption-mode-upper-threshold{self.preemption_mode_upper_threshold}.out"
+            filename = f"preemption-threshold{self.preemption_threshold}_preemption-mode-upper-threshold{self.preemption_mode_upper_threshold}.txt"
         
         # Initialize tqdm.
         if use_tqdm:
@@ -254,5 +254,5 @@ class LLM:
         outputs = sorted(outputs, key=lambda x: int(x.request_id))
         with open(filedir / filename, 'w') as file:
             for t in times:
-                file.write(t)
+                file.write(str(t))
         return outputs
