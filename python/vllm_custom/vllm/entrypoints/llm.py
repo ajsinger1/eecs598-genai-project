@@ -90,7 +90,7 @@ class LLM:
         max_context_len_to_capture: int = 8192,
         disable_custom_all_reduce: bool = False,
         preemption_threshold: int = 600,
-        preemption_mode_upper_threshold: int = 30000
+        preemption_mode_upper_threshold: int = 30000,
         **kwargs,
     ) -> None:
         if "disable_log_stats" not in kwargs:
