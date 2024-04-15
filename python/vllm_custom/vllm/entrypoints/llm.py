@@ -254,5 +254,5 @@ class LLM:
         outputs = sorted(outputs, key=lambda x: int(x.request_id))
         with open(filedir / filename, 'w') as file:
             for t in times:
-                file.write(str(t))
+                file.write(str(t) + '\n')
         return outputs
