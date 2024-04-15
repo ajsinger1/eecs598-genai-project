@@ -233,12 +233,15 @@ class LLM:
             pbar = tqdm(total=num_requests, desc="Processed prompts")
         # Run the engine.
         outputs: List[RequestOutput] = []
-        times = []
+        #times = []
         while self.llm_engine.has_unfinished_requests():
             start = time.perf_counter()
             step_outputs = self.llm_engine.step()
             end = time.perf_counter()
-            times.append(end-start)
+            #times.append(end-start)
+            time = end-start
+            with open(filedir / filename, 'w') as file:
+                file.write(str(time) + '\n')
             # time.now
 
             for output in step_outputs:
@@ -252,7 +255,7 @@ class LLM:
         # This is necessary because some requests may be finished earlier than
         # its previous requests.
         outputs = sorted(outputs, key=lambda x: int(x.request_id))
-        with open(filedir / filename, 'w') as file:
+        """with open(filedir / filename, 'w') as file:
             for t in times:
-                file.write(str(t) + '\n')
+                file.write(str(t) + '\n')"""
         return outputs
